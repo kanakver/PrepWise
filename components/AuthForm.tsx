@@ -12,6 +12,9 @@ import FormField from "@/components/FormField"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
 import { useRouter } from "next/navigation";
+import { setSessionCookie, signIn, signUp } from "@/lib/actions/auth.actions";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/firebase/client";
 
 
 const authFormSchema = (type: "sign-in" | "sign-up") => z.object({
@@ -35,12 +38,44 @@ function AuthForm({ type }: { type: "sign-in" | "sign-up" }) {
   })
 
   // 2. Define a submit handler.
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       if (type === "sign-up") {
+        const { name, email, password } = values;
+
+        const userCredintials = await createUserWithEmailAndPassword(auth, email, password);
+
+        const result = await signUp({
+          uid: userCredintials.user.uid,
+          name: name || "",
+          email,
+          password,
+        })
+
+        if (!result.success) {
+          toast.error(result.message)
+          return;
+        }
+
         toast.success("Account created successfully.Please sign in to continue")
         router.push("/sign-in")
       } else {
+        const { email, password } = values;
+
+        const userCredintials = await signInWithEmailAndPassword(auth, email, password);
+
+        const idToken = await userCredintials.user.getIdToken();
+
+        if (!idToken) {
+          toast.error("Something went wrong")
+          return;
+        }
+
+        await signIn({
+          email,
+          idToken,
+        })
+
         toast.success("Signed in successfully")
         router.push("/")
       }
@@ -54,7 +89,7 @@ function AuthForm({ type }: { type: "sign-in" | "sign-up" }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <div className="flex flex-center card-border lg:min-w-[566px]">
+      <div className="flex flex-center lg:min-w-[566px]">
         <div className="flex flex-col gap-6 card py-14 px-10">
           <div className="flex flex-row gap-2 justify-center">
             <Image src="/logo.svg" alt="logo" height={32} width={38} />
@@ -86,7 +121,7 @@ function AuthForm({ type }: { type: "sign-in" | "sign-up" }) {
                 placeholder="Enter your password"
                 type="password"
               />
-              <Button type="submit" className="btn">{isSignIn ? "Sign In" : "Create an Account" }</Button>
+              <Button type="submit" className="btn">{isSignIn ? "Sign In" : "Create an Account"}</Button>
             </form>
             <p className="text-center">
               {isSignIn ? "No account yet?" : "Have an account already?"}
